@@ -35,6 +35,8 @@
 *.i*86
 *.x86_64
 *.hex
+acquired
+client
 
 # Debug files
 *.dSYM/
@@ -50,3 +52,6 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# vscode shite
+.vscode
