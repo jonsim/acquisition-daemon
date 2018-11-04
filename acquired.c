@@ -6,7 +6,9 @@
  */
 #include <assert.h>     // assert
 #include <netinet/in.h> // sockaddr_in
+#include <poll.h>       // poll, struct pollfd
 #include <stdio.h>      // printf
+#include <string.h>     // strncmp
 #include <sys/socket.h> // socket, bind, listen, getsockname
 #include <unistd.h>     // getopt, daemon
 
@@ -22,9 +24,12 @@
   #define DEBUG 0
 #endif
 
-#define DEFAULT_LOG_FILE ".acquired.log"
-#define LOCK_FILE        "/tmp/.acquired.lck"
-#define FLOCK_POST_LEN   128
+#define DEFAULT_LOG_FILE    ".acquired.log"
+#define LOCK_FILE           "/tmp/.acquired.lck"
+#define FLOCK_POST_LEN      128
+#define SERVER_QUEUE        64
+#define SERVER_TIMEOUT      10 * 1000 // milliseconds
+#define SERVER_BUFLEN       1024
 
 
 
@@ -51,15 +56,12 @@ cl_opts program_opts;
 
 
 /*
- * Utility functions
+ * Functions
  */
 
-
-
-/*
- * Program functions
+/**
+ * \brief   Prints the program help text.
  */
-
 void print_help(void)
 {
     printf("Usage: acquired [-h] [-l LOG_FILE]\n");
@@ -69,9 +71,16 @@ void print_help(void)
     printf("\n");
     printf("Optional arguments:\n");
     printf("  -h    Show this help message and exit.\n");
-    printf("  -l    The log file \n");
+    printf("  -l    Path to the log file to use.\n");
 }
 
+/**
+ * \brief   Parses the command line arguments.
+ *
+ * \param opts  Pointer to the cl_opts structure to populate with arguments.
+ * \param argc  The number of passed arguments.
+ * \param argv  The passed argument array.
+ */
 void parse_command_line(cl_opts* opts, int argc, char* const argv[])
 {
     int opt;
@@ -95,11 +104,20 @@ void parse_command_line(cl_opts* opts, int argc, char* const argv[])
     // None.
 }
 
+/**
+ * \brief   Daemonize's the process. The parent process will successfully exit
+ *      upon calling this function.
+ */
 void daemonize(void)
 {
     if (daemon(1, DEBUG) < 0) DIE("Failed to daemonize");
 }
 
+/**
+ * \brief   Initialises the server's networking.
+ *
+ * \return  The file descriptor on which the server is listening for clients.
+ */
 int init(void)
 {
     int listen_fd;
@@ -118,11 +136,19 @@ int init(void)
         DIE("Failed to bind socket");
 
     // Listen for connections.
-    if (listen(listen_fd, 64) < 0) DIE("Failed to listen socket");
+    if (listen(listen_fd, SERVER_QUEUE) < 0) DIE("Failed to listen socket");
 
     return listen_fd;
 }
 
+/**
+ * \brief   Determines the port a socket is listening on.
+ *
+ * \param port_s    Pointer to buffer in which the port number will be written.
+ *      This must be large enough to hold an unsigned integer (10 characters).
+ *      Not NULL.
+ * \param socket_fd Socket file descriptor whose port to determine.
+ */
 void get_port(char* port_s, int socket_fd)
 {
     unsigned int port;
@@ -135,12 +161,90 @@ void get_port(char* port_s, int socket_fd)
     snprintf(port_s, 10, "%d", port);
 }
 
-void processing_loop(int listen_fd)
+/**
+ * \brief   Processes a connection with a client.
+ *
+ * \param client_fd File descriptor of the client to process.
+ */
+void process_connection(int client_fd)
 {
+    int ret;
+    char rdbuf[SERVER_BUFLEN];
+    char wrbuf[SERVER_BUFLEN];
+
+    // Read the command.
+    ret = read(client_fd, rdbuf, SERVER_BUFLEN);
+    if (ret <= 0)
+    {
+        dlog(LOG_WARNING, "Failed to read from client connection");
+        return;
+    }
+
+    // Perform the command.
+    if (strncmp(rdbuf, "print", SERVER_BUFLEN) == 0)
+    {
+        snprintf(wrbuf, SERVER_BUFLEN, "%s\n", "hello world");
+        ret = write(client_fd, wrbuf, strnlen(wrbuf, SERVER_BUFLEN));
+        if (ret <= 0)
+        {
+            dlog(LOG_WARNING, "Failed to write to client connection");
+            return;
+        }
+    }
+    else
+    {
+        rdbuf[SERVER_BUFLEN-1] = '\0';
+        dlog(LOG_WARNING, "Unknown command from client: %s", rdbuf);
+    }
+}
+
+/**
+ * \brief   Waits and processes incoming connections to the server until an
+ *      inactivity timeout has been reached, at which point it exits.
+ *
+ * \param server_fd File descriptor of the server to accept from.
+ */
+void process_connections(int server_fd)
+{
+    int ret;
+    int client_fd;
+    struct sockaddr_in client_addr;
+    socklen_t client_len = sizeof(client_addr);
+    struct pollfd server_poll;
+    server_poll.fd = server_fd;
+    server_poll.events = POLLIN;
+
+    for (;;)
+    {
+        // Wait for a connection with a timeout.
+        ret = poll(&server_poll, 1, SERVER_TIMEOUT);
+        if (ret <= 0)
+        {
+            dlog(LOG_INFO, "Daemon activity timeout reached");
+            break;
+        }
+
+        // Connection must be ready, accept it.
+        client_fd = accept(server_fd, (struct sockaddr*) &client_addr, &client_len);
+        if (client_fd < 0)
+        {
+            dlog(LOG_ERROR, "Failed to accept client connection");
+            continue;
+        }
+
+        // Do something with it.
+        process_connection(client_fd);
+
+        // Done with the connection, close it.
+        close(client_fd);
+    }
 
     dlog(LOG_INFO, "Processing finished, exiting");
 }
 
+/**
+ * \brief   Main.
+ */
 int main(int argc, char* const argv[])
 {
     int listen_fd;
@@ -179,7 +283,7 @@ int main(int argc, char* const argv[])
     daemonize();
 
     // Enter main processing loop.
-    processing_loop(listen_fd);
+    process_connections(listen_fd);
 
     // Daemon finished, release lock and return.
     release_flock(&daemon_lock);

@@ -54,9 +54,12 @@ void release_flock(flock* lock);
 void post_to_flock(flock* lock, const char* msg);
 
 /**
- * \brief   Blocks until the file lock is written to.
+ * \brief   Blocks until a message is posted to a file lock.
  *
- * \param lock  Pointer to flock struct to wait for. Not NULL. Should not be
+ * \param msg       Pointer to the buffer to read the file lock's posted message
+ *      into. Not NULL.
+ * \param msglen    Length of the msg buffer.
+ * \param lock      Pointer to flock struct to wait for. Not NULL. Should not be
  *      acquired (it makes no sense to call this function if this process owns
  *      the lock) the glob_fp field must be initialised to the file path of the
  *      file lock to wait on. All other fields should be left uninitialised.
