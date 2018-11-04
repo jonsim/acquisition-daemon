@@ -1,6 +1,12 @@
+/**
+ * \file   flock.c
+ * \author Jonathan Simmonds
+ * \brief  File locking API.
+ */
 #include <assert.h>     // assert
 #include <fcntl.h>      // O_CREAT, O_RDWR, O_TRUNC, F_LOCK, F_ULOCK
-#include <stdio.h>      // fopen, fclose, fprintf, vfprintf, fileno, fflush
+#include <stdio.h>      // fopen, fclose, fprintf, vfprintf, fileno, fflush,
+                        // fread
 #include <stdlib.h>     // exit
 #include <sys/stat.h>   // stat
 #include <sys/types.h>  // getopt, stat
@@ -93,6 +99,7 @@ void post_to_flock(flock* lock, const char* msg)
 {
     assert(lock);
     assert(lock->glob_fd);
+    assert(msg);
     FILE* glob_fs = fdopen(lock->glob_fd, "w");
     fprintf(glob_fs, "%s\n", msg);
     fflush(glob_fs);
@@ -101,16 +108,36 @@ void post_to_flock(flock* lock, const char* msg)
         perror("Failed to release r/w lock on global lock file");
 }
 
-void await_flock_post(flock* lock)
+void await_flock_post(char* msg, size_t msglen, flock* lock)
 {
     assert(lock);
     assert(lock->glob_fp);
+    assert(msg);
+    assert(msglen);
+    size_t read_size = 0;
     int glob_fd = open(lock->glob_fp, O_RDONLY);
     if (glob_fd < 0)
         perror("Failed to open global lock file");
-    if (lockf(glob_fd, F_LOCK, 0) < 0)
-        perror("Failed to wait for r/w lock on global lock file");
-    if (lockf(glob_fd, F_ULOCK, 0) < 0)
-        perror("Failed to release tested r/w lock on global lock file");
+
+    // Spin waiting for the file lock to be posted to. This uses unix file locks
+    // to save spin-lock cycles, but this is purely an optimisation. As noted
+    // above, it is possible for a child process to await a flock before the
+    // flock initialisation has acquired the unix file lock. For that reason
+    // the call is still wrapped as a spin lock.
+    while (read_size == 0)
+    {
+        // Wait until unix file lock is released.
+        if (lockf(glob_fd, F_LOCK, 0) < 0)
+            perror("Failed to wait for r/w lock on global lock file");
+
+        // Read the contents.
+        read_size = read(glob_fd, msg, msglen);
+        msg[msglen-1] = '\0';
+
+        // Release the unix file lock.
+        if (lockf(glob_fd, F_ULOCK, 0) < 0)
+            perror("Failed to release tested r/w lock on global lock file");
+    }
+
     close(glob_fd);
 }

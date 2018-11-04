@@ -55,3 +55,6 @@ dkms.conf
 
 # vscode shite
 .vscode
+
+# logs
+.acquired.log

@@ -1,3 +1,8 @@
+/**
+ * \file   flock.h
+ * \author Jonathan Simmonds
+ * \brief  File locking API.
+ */
 #ifndef FLOCK_H
 #define FLOCK_H
 
@@ -56,6 +61,6 @@ void post_to_flock(flock* lock, const char* msg);
  *      the lock) the glob_fp field must be initialised to the file path of the
  *      file lock to wait on. All other fields should be left uninitialised.
  */
-void await_flock_post(flock* lock);
+void await_flock_post(char* msg, size_t msglen, flock* lock);
 
 #endif // FLOCK_H

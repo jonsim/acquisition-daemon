@@ -1,7 +1,13 @@
+/**
+ * \file   log.h
+ * \author Jonathan Simmonds
+ * \brief  Simple logging API.
+ */
 #ifndef LOG_H
 #define LOG_H
 
 // Includes
+#include <stdarg.h>     // va_start, va_end
 #include <stdio.h>      // fopen, fclose, fprintf, vfprintf
 #include <stdlib.h>     // exit
 #include <time.h>       // time, localtime
@@ -27,6 +33,7 @@ void dlog(int level, const char* fmt, ...)
 {
     if (!log_file) return;
     va_list vargs;
+    va_start(vargs, fmt);
     time_t now = time(0);
     struct tm* nowtm = localtime(&now);
     FILE* f = fopen(log_file, "a");
@@ -44,6 +51,7 @@ void dlog(int level, const char* fmt, ...)
     vfprintf(f, fmt, vargs);
     fprintf(f, "\n");
 
+    va_end(vargs);
     fclose(f);
 }
 
