@@ -1,4 +1,4 @@
-.PHONY: all clean
+.PHONY: all clean test_client
 
 # Build setup
 CC = gcc
@@ -6,7 +6,7 @@ C_FLAGS = -Wall -pedantic -O0 -g -DDEBUG=1
 L_FLAGS = -Wall -pedantic -O0 -g
 
 # PHONY targets
-all: acquired
+all: acquired client
 
 clean:
 	rm -f acquired *.o *.a *.so
@@ -18,3 +18,11 @@ clean:
 # Binary targets
 acquired: acquired.o flock.o
 	$(CC) $(L_FLAGS) -o $@ $^
+
+client: client.o
+	$(CC) $(L_FLAGS) -o $@ $^
+
+test_client:
+	for i in $(shell seq 1 32); do \
+		./client & \
+	done

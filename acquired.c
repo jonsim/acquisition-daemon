@@ -1,5 +1,5 @@
 /**
- * \file   acquired.h
+ * \file   acquired.c
  * \author Jonathan Simmonds
  * \brief  Framework for a daemon process which acquires a shared resource and
  *      manages access to that resource between many processes.
@@ -110,7 +110,10 @@ void parse_command_line(cl_opts* opts, int argc, char* const argv[])
  */
 void daemonize(void)
 {
-    if (daemon(1, DEBUG) < 0) DIE("Failed to daemonize");
+    // Ensure all standard streams are flushed before daemonizing.
+    fflush(stdout);
+    // Daemonize.
+    if (daemon(1, 0) < 0) DIE("Failed to daemonize");
 }
 
 /**
@@ -183,7 +186,7 @@ void process_connection(int client_fd)
     // Perform the command.
     if (strncmp(rdbuf, "print", SERVER_BUFLEN) == 0)
     {
-        snprintf(wrbuf, SERVER_BUFLEN, "%s\n", "hello world");
+        snprintf(wrbuf, SERVER_BUFLEN, "%s", "hello world");
         ret = write(client_fd, wrbuf, strnlen(wrbuf, SERVER_BUFLEN));
         if (ret <= 0)
         {

@@ -101,7 +101,7 @@ void post_to_flock(flock* lock, const char* msg)
     assert(lock->glob_fd);
     assert(msg);
     FILE* glob_fs = fdopen(lock->glob_fd, "w");
-    fprintf(glob_fs, "%s\n", msg);
+    fprintf(glob_fs, "%s", msg);
     fflush(glob_fs);
     lseek(lock->glob_fd, 0, SEEK_SET);
     if (lockf(lock->glob_fd, F_ULOCK, 0) < 0)
@@ -115,7 +115,7 @@ void await_flock_post(char* msg, size_t msglen, flock* lock)
     assert(msg);
     assert(msglen);
     size_t read_size = 0;
-    int glob_fd = open(lock->glob_fp, O_RDONLY);
+    int glob_fd = open(lock->glob_fp, O_RDWR);
     if (glob_fd < 0)
         perror("Failed to open global lock file");
 
