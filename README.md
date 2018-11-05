@@ -11,6 +11,7 @@ The important part is that the daemon itself is a singleton (to manage accesses
 to the shared resource) and the front-end is threadsafe to guarantee this.
 
 This is best shown with a diagram:
+
 ![acquisition-daemon communications](./doc/acquisition-daemon.svg)
 
 This has been written using POSIX system calls, but all of these have a Windows
