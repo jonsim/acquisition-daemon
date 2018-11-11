@@ -37,10 +37,9 @@ unsigned int get_daemon_port(void)
 }
 
 /**
- * \brief   Invokes the acquisition daemon.
- *      NB: This uses popen to actually run the acquired binary to initiate
- *      communications with the daemon, though in a production environment
- *      execvp or similar would be more appropriate.
+ * \brief   Invokes the acquisition daemon to retrieve the connection
+ *      information, connects and uses the simple command interface to issue a
+ *      query and print the result.
  */
 void invoke_acquired(void)
 {
