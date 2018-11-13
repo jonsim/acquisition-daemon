@@ -2,7 +2,7 @@
 
 # Build setup
 CC = gcc
-C_FLAGS = -Wall -pedantic -O0 -g -DDEBUG=1
+C_FLAGS = -Wall -pedantic -O0 -g -DDEBUG=1 -std=gnu99
 L_FLAGS = -Wall -pedantic -O0 -g
 
 # PHONY targets
