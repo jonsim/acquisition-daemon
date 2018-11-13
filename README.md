@@ -17,6 +17,9 @@ This is best shown with a diagram:
 This has been written using POSIX system calls, but all of these have a Windows
 equivalent and it would be relatively straight forward to port.
 
+Connections are processed on separate handler threads. Release v1.0 contains a
+non-pthreaded example which processed connections sequentially.
+
 The current implementation uses a simple text protocol over TCP sockets for IPC
 between client and daemon, but this could just as easily be implemented with
 named pipes or Google's [Protocol Buffers](https://github.com/protocolbuffers/protobuf).
@@ -26,7 +29,8 @@ named pipes or Google's [Protocol Buffers](https://github.com/protocolbuffers/pr
 
 All source files except `client.c` make up the acquisition daemon (`acquired`).
 A minimally functional client implementaion is provided (`client`) purely for
-reference to illustrate how the acquisition daemon is expected to be used.
+reference to illustrate how the acquisition daemon is expected to be used. The
+daemon logs to `.acquired.log`.
 
 The code can be invoked as follows:
 ```

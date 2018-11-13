@@ -16,8 +16,8 @@ clean:
 	$(CC) $(C_FLAGS) -c -o $@ $<
 
 # Binary targets
-acquired: acquired.o flock.o
-	$(CC) $(L_FLAGS) -o $@ $^
+acquired: acquired.o flock.o threadpool.o
+	$(CC) $(L_FLAGS) -pthread -o $@ $^
 
 client: client.o
 	$(CC) $(L_FLAGS) -o $@ $^

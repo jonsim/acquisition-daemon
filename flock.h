@@ -8,6 +8,10 @@
 
 #define MAXPATH     1024
 
+/**
+ * \brief   Structure representing a file lock. Only glob_fp is intended to be
+ *      interactive with by clients.
+ */
 typedef struct flock_t
 {
     /** Path to the global file lock. Must be populated by the constructor

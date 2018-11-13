@@ -7,6 +7,7 @@
 #include <assert.h>     // assert
 #include <netinet/in.h> // sockaddr_in
 #include <poll.h>       // poll, struct pollfd
+#include <pthread.h>    // pthread_create, pthread_t
 #include <stdio.h>      // printf
 #include <string.h>     // strncmp
 #include <sys/socket.h> // socket, bind, listen, getsockname
@@ -14,6 +15,7 @@
 
 #include "flock.h"
 #include "log.h"
+#include "threadpool.h"
 
 
 
@@ -30,6 +32,7 @@
 #define SERVER_QUEUE        64
 #define SERVER_TIMEOUT      10 * 1000 // milliseconds
 #define SERVER_BUFLEN       1024
+#define SERVER_THREADS      64
 
 
 
@@ -169,18 +172,19 @@ void get_port(char* port_s, int socket_fd)
  *
  * \param client_fd File descriptor of the client to process.
  */
-void process_connection(int client_fd)
+void process_connection(void* client_fd_raw)
 {
+    int client_fd = (long) client_fd_raw;
     int ret;
     char rdbuf[SERVER_BUFLEN];
     char wrbuf[SERVER_BUFLEN];
 
     // Read the command.
-    ret = read(client_fd, rdbuf, SERVER_BUFLEN);
+    while ((ret = read(client_fd, rdbuf, SERVER_BUFLEN)) == 0) {}
     if (ret <= 0)
     {
         dlog(LOG_WARNING, "Failed to read from client connection");
-        return;
+        goto exit;
     }
 
     // Perform the command.
@@ -191,7 +195,7 @@ void process_connection(int client_fd)
         if (ret <= 0)
         {
             dlog(LOG_WARNING, "Failed to write to client connection");
-            return;
+            goto exit;
         }
     }
     else
@@ -199,6 +203,10 @@ void process_connection(int client_fd)
         rdbuf[SERVER_BUFLEN-1] = '\0';
         dlog(LOG_WARNING, "Unknown command from client: %s", rdbuf);
     }
+
+exit:
+    // Done with the connection, close it.
+    close(client_fd);
 }
 
 /**
@@ -209,13 +217,17 @@ void process_connection(int client_fd)
  */
 void process_connections(int server_fd)
 {
-    int ret;
-    int client_fd;
-    struct sockaddr_in client_addr;
-    socklen_t client_len = sizeof(client_addr);
+    int ret, client_fd;
+    threadpool pool;
     struct pollfd server_poll;
     server_poll.fd = server_fd;
     server_poll.events = POLLIN;
+
+    if (threadpool_create(&pool, SERVER_THREADS) < 0)
+    {
+        dlog(LOG_ERROR, "Failed to create threadpool");
+        return;
+    }
 
     for (;;)
     {
@@ -223,26 +235,40 @@ void process_connections(int server_fd)
         ret = poll(&server_poll, 1, SERVER_TIMEOUT);
         if (ret <= 0)
         {
-            dlog(LOG_INFO, "Daemon activity timeout reached");
-            break;
+            // Timed out, are there active threads?
+            ret = threadpool_active_threads(&pool);
+            if (ret < 0)
+            {
+                dlog(LOG_WARNING, "Failed to count threadpool active threads");
+            }
+            else if (ret == 0)
+            {
+                dlog(LOG_INFO, "Daemon activity timeout reached");
+                break;
+            }
+            else
+            {
+                dlog(LOG_INFO, "No new connections but %d active threads", ret);
+            }
+            continue;
         }
 
         // Connection must be ready, accept it.
-        client_fd = accept(server_fd, (struct sockaddr*) &client_addr, &client_len);
+        client_fd = accept(server_fd, NULL, NULL);
         if (client_fd < 0)
         {
             dlog(LOG_ERROR, "Failed to accept client connection");
             continue;
         }
 
-        // Do something with it.
-        process_connection(client_fd);
-
-        // Done with the connection, close it.
-        close(client_fd);
+        // Spawn a thread to process the connection. The spawned thread is
+        // responsible for closing the client_fd.
+        dlog(LOG_INFO, "Accepted client connection, spawning handler thread");
+        ret = threadpool_dispatch(&pool, process_connection, (void*)((long) client_fd));
     }
 
     dlog(LOG_INFO, "Processing finished, exiting");
+    threadpool_destroy(&pool);
 }
 
 /**
